@@ -263,6 +263,38 @@
     }
   `;
 
+  /* Ambient turbulence — adds a tiny divergence-free curl field to the
+     velocity every step so the water is never perfectly still. Even with
+     no user input, existing dye drifts and slowly blooms instead of
+     sitting frozen in place. The field is two perpendicular sine waves
+     (an analytic stream function whose curl is the field itself, so
+     div = ∂(sin(ky))/∂x + ∂(−sin(kx))/∂y = 0 exactly — no pressure
+     projection needed to keep incompressibility). A second smaller-scale
+     layer adds texture. uTime morphs the field slowly. */
+  const ambientShader = `
+    precision highp float;
+    precision highp sampler2D;
+    varying vec2 vUv;
+    uniform sampler2D uVelocity;
+    uniform float uAmbientStrength;
+    uniform float uAmbientScale;
+    uniform float uTime;
+    void main () {
+      float k = uAmbientScale * 6.28318;
+      float t = uTime;
+      vec2 amb = vec2(
+         sin(vUv.y * k        + t * 0.70),
+        -sin(vUv.x * k        + t * 0.70 + 1.0)
+      ) * 0.6
+      + vec2(
+         sin(vUv.y * k * 2.3 + t * 1.10 + 1.7),
+        -sin(vUv.x * k * 2.3 + t * 1.10 + 0.3)
+      ) * 0.3;
+      vec2 v = texture2D(uVelocity, vUv).xy;
+      gl_FragColor = vec4(v + amb * uAmbientStrength, 0.0, 1.0);
+    }
+  `;
+
   /* Dye diffusion — molecular spread so an undisturbed drop slowly softens
      and blooms instead of sitting as a hard-edged blob. 4-neighbor weighted
      average mixed with the center at strength uDyeDiffusion. Mass-preserving
@@ -448,6 +480,9 @@
         DENSITY_DISSIPATION: 0.35,
         VELOCITY_DISSIPATION: 0.25,
         DYE_DIFFUSION: 0.04,     // per-step 4-tap blur strength on the dye
+        AMBIENT_STRENGTH: 0.04,  // ambient curl-noise velocity injection magnitude
+        AMBIENT_SCALE: 2.5,      // ambient spatial frequency (lower = bigger swirls)
+        AMBIENT_SPEED: 0.08,     // ambient time evolution rate
         PRESSURE: 0.8,
         PRESSURE_ITERATIONS: 20,
         CURL: 28,
@@ -525,6 +560,7 @@
         splat: make(splatShader),
         advection: make(advectionShader, advDefines),
         diffusion: make(diffusionShader),
+        ambient: make(ambientShader),
         divergence: make(divergenceShader),
         curl: make(curlShader),
         vorticity: make(vorticityShader),
@@ -733,6 +769,22 @@
       gl.uniform1i(gradProg.uniforms.uVelocity, this.velocity.read.attach(1));
       this._blit(this.velocity.write);
       this.velocity.swap();
+
+      // Ambient turbulence — small divergence-free curl injected into the
+      // velocity each step. Keeps the water alive even with no input.
+      // Injected here (after projection, before advection) because the
+      // analytic field is already div-free → no pressure projection needed.
+      if (this.config.AMBIENT_STRENGTH > 0) {
+        this._ambientTime = (this._ambientTime || 0) + dt * (this.config.AMBIENT_SPEED || 0.08);
+        const ambProg = this.programs.ambient;
+        ambProg.bind();
+        gl.uniform1i(ambProg.uniforms.uVelocity, this.velocity.read.attach(0));
+        gl.uniform1f(ambProg.uniforms.uAmbientStrength, this.config.AMBIENT_STRENGTH);
+        gl.uniform1f(ambProg.uniforms.uAmbientScale, this.config.AMBIENT_SCALE);
+        gl.uniform1f(ambProg.uniforms.uTime, this._ambientTime);
+        this._blit(this.velocity.write);
+        this.velocity.swap();
+      }
 
       // Advect velocity
       const advProg = this.programs.advection;

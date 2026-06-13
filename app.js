@@ -86,7 +86,13 @@
       // Dye diffuses on its own — a still drop softens and slowly blooms
       // outward over many seconds, like real ink in still water. Live-
       // tunable as window.FLUID.DYE_DIFFUSION.
-      DYE_DIFFUSION: 0.04,
+      DYE_DIFFUSION: 0.10,
+      // Ambient water turbulence — tiny divergence-free curl-noise velocity
+      // injected each step so existing dye drifts and swirls even with no
+      // user input. Live-tunable as FLUID.AMBIENT_STRENGTH / SCALE / SPEED.
+      AMBIENT_STRENGTH: 0.04,
+      AMBIENT_SCALE: 2.5,
+      AMBIENT_SPEED: 0.08,
       PRESSURE: 0.8,
       PRESSURE_ITERATIONS: 20,
       CURL: 28,

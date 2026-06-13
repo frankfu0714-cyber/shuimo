@@ -151,16 +151,17 @@
   function tap(uv) {
     const ink = currentInkRGB();
     const absorb = absorbance(ink);
-    // small radial nudge — random direction
+    // Gentler radial nudge — the drop should mostly stay put and let
+    // diffusion + ambient flow carry it. Force ~62% softer than before.
     const angle = Math.random() * Math.PI * 2;
-    const force = 8;
+    const force = 3;
     const dx = Math.cos(angle) * force;
     const dy = Math.sin(angle) * force;
     // intensity tuned so single tap is a visible drop but not opaque
     const intensity = 0.85;
     sim.splat(uv.x, uv.y, dx, dy, absorb.map((c) => c * intensity));
-    // Tap also rings the wave field so the drop visibly emanates outward.
-    if (waves) waves.pulse(uv, 5.0);
+    // Tap rings the wave field — gently, so it doesn't blast the ink away.
+    if (waves) waves.pulse(uv, 1.0);
   }
 
   function drag(prev, curr) {

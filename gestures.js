@@ -38,8 +38,9 @@
   const FINGERTIP_INDICES = [4, 8, 12, 16, 20];
   /* Wave-layer parameters. Fingertip continuous-contact capsules are stamped
      into the wave height field every frame by app.js via getFingertips().
-     A pinch fires a one-shot stronger pulse so the drop visibly rings out. */
-  const PINCH_PULSE_AMP = 6.0;            // ampMul on pinch one-shot
+     A pinch fires a one-shot pulse so the drop visibly rings out — kept
+     gentle so the ink can spread on its own rather than getting blasted. */
+  const PINCH_PULSE_AMP = 1.2;            // ampMul on pinch one-shot
 
   // ---------- State ----------
 

@@ -34,10 +34,13 @@
   // ---------- Tuning constants (top of module so Frank can dial them) ----------
   const WAVE = {
     GRID_WIDTH: 512,        // height grid resolution; auto-aspected to canvas
-    WAVE_SPEED: 0.6,        // c² in (2H - H_prev + c²·∇²H) · damping
-    DAMPING: 0.996,         // per-step exponential decay
-    IMPULSE_AMP: 0.18,      // capsule stamp height per frame (per-pixel inside cap)
-    IMPULSE_RADIUS: 0.045,  // capsule radius in normalized UV
+    // Tuned for "focused on the fingers, not the whole pool":
+    //   slower propagation + faster decay = visible motion stays within a
+    //   small radius of each finger and old positions don't keep ringing.
+    WAVE_SPEED: 0.35,       // c² in (2H - H_prev + c²·∇²H) · damping
+    DAMPING: 0.985,         // per-step exponential decay
+    IMPULSE_AMP: 0.08,      // capsule stamp height per frame (per-pixel inside cap)
+    IMPULSE_RADIUS: 0.022,  // capsule radius in normalized UV — tighter rings
     REFRACT: 0.55,          // wave gradient → ink UV offset multiplier
     LENS_GAIN: 0.9,         // Laplacian → brightness multiplier (crest magnify)
     NORMAL_SCALE: 2.6,      // gradient → surface normal scale (refraction physics)

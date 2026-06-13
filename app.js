@@ -83,6 +83,10 @@
       // carries momentum and ink spreads like real water (instead of
       // damping out a quarter-second after the user moves).
       VELOCITY_DISSIPATION: 0.05,
+      // Dye diffuses on its own — a still drop softens and slowly blooms
+      // outward over many seconds, like real ink in still water. Live-
+      // tunable as window.FLUID.DYE_DIFFUSION.
+      DYE_DIFFUSION: 0.04,
       PRESSURE: 0.8,
       PRESSURE_ITERATIONS: 20,
       CURL: 28,
@@ -95,6 +99,10 @@
     document.body.innerHTML = '<p style="position:fixed;inset:0;display:grid;place-items:center;font-family:serif;color:#3a3a3a;text-align:center;padding:24px;">水墨 needs WebGL.<br/><small>Your browser does not seem to support it.</small></p>';
     return;
   }
+
+  // Expose the fluid config for live tuning from devtools, mirroring how
+  // window.WAVE works for the wave layer. e.g. `FLUID.DYE_DIFFUSION = 0.06`.
+  window.FLUID = sim.config;
 
   // Wave-physics surface layer. Sits on top of the ink sim — the ink renders
   // into wave.inkTarget instead of straight to the canvas, then the wave

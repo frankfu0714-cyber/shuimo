@@ -263,6 +263,32 @@
     }
   `;
 
+  /* Dye diffusion — molecular spread so an undisturbed drop slowly softens
+     and blooms instead of sitting as a hard-edged blob. 4-neighbor weighted
+     average mixed with the center at strength uDyeDiffusion. Mass-preserving
+     by symmetry: integrating over the grid, every k·c "outflow" from a
+     pixel is exactly cancelled by the k·avg "inflow" to its neighbors. */
+  const diffusionShader = `
+    precision highp float;
+    precision highp sampler2D;
+    varying vec2 vUv;
+    varying vec2 vL;
+    varying vec2 vR;
+    varying vec2 vT;
+    varying vec2 vB;
+    uniform sampler2D uDye;
+    uniform float uDyeDiffusion;
+    void main () {
+      vec4 c = texture2D(uDye, vUv);
+      vec4 l = texture2D(uDye, vL);
+      vec4 r = texture2D(uDye, vR);
+      vec4 t = texture2D(uDye, vT);
+      vec4 b = texture2D(uDye, vB);
+      vec4 avg = (l + r + t + b) * 0.25;
+      gl_FragColor = mix(c, avg, uDyeDiffusion);
+    }
+  `;
+
   const advectionShader = `
     precision highp float;
     precision highp sampler2D;
@@ -421,6 +447,7 @@
         DYE_RESOLUTION: 1024,
         DENSITY_DISSIPATION: 0.35,
         VELOCITY_DISSIPATION: 0.25,
+        DYE_DIFFUSION: 0.04,     // per-step 4-tap blur strength on the dye
         PRESSURE: 0.8,
         PRESSURE_ITERATIONS: 20,
         CURL: 28,
@@ -495,6 +522,7 @@
         display: make(displayShader),
         splat: make(splatShader),
         advection: make(advectionShader, advDefines),
+        diffusion: make(diffusionShader),
         divergence: make(divergenceShader),
         curl: make(curlShader),
         vorticity: make(vorticityShader),
@@ -724,6 +752,20 @@
       gl.uniform1f(advProg.uniforms.dissipation, this.config.DENSITY_DISSIPATION);
       this._blit(this.dye.write);
       this.dye.swap();
+
+      // Diffuse dye — mass-preserving 4-neighbor blur so a still drop slowly
+      // softens and blooms instead of holding a hard edge forever. texelSize
+      // here is the dye buffer's so the precomputed vL/vR/vT/vB varyings
+      // sample neighbors at the correct pitch.
+      if (this.config.DYE_DIFFUSION > 0) {
+        const diffProg = this.programs.diffusion;
+        diffProg.bind();
+        gl.uniform2f(diffProg.uniforms.texelSize, this.dye.texelSizeX, this.dye.texelSizeY);
+        gl.uniform1i(diffProg.uniforms.uDye, this.dye.read.attach(0));
+        gl.uniform1f(diffProg.uniforms.uDyeDiffusion, this.config.DYE_DIFFUSION);
+        this._blit(this.dye.write);
+        this.dye.swap();
+      }
 
       this._applyFade(dt);
     }

@@ -41,6 +41,13 @@
     DAMPING: 0.985,         // per-step exponential decay
     IMPULSE_AMP: 0.08,      // capsule stamp height per frame (per-pixel inside cap)
     IMPULSE_RADIUS: 0.022,  // capsule radius in normalized UV — tighter rings
+    // Absorbing-boundary "sponge" — without this, CLAMP_TO_EDGE sampling
+    // makes waves reflect back from the canvas edges and the pool gets
+    // chaotic. We instead damp aggressively in a thin margin around the
+    // edge so waves traveling outward simply die at the edge, as if the
+    // pool extended to infinity.
+    SPONGE_WIDTH: 0.08,     // margin (normalized UV) over which sponge ramps in
+    SPONGE_DAMP: 0.86,      // per-frame damping multiplier AT the edge
     REFRACT: 0.55,          // wave gradient → ink UV offset multiplier
     LENS_GAIN: 0.9,         // Laplacian → brightness multiplier (crest magnify)
     NORMAL_SCALE: 2.6,      // gradient → surface normal scale (refraction physics)
@@ -79,6 +86,8 @@
     uniform float uDamping;
     uniform float uRadius;
     uniform float uAmp;
+    uniform float uSpongeWidth;
+    uniform float uSpongeDamp;
     uniform vec4 uCapsules[${MAX_CAPSULES}];   // .xy = curr, .zw = prev
     uniform float uCapAmps[${MAX_CAPSULES}];   // per-capsule amp multiplier
     uniform float uCount;                       // float (branch-free with step())
@@ -101,6 +110,16 @@
       float lap = (R + L + T + B) * 0.5 + (TR + TL + BR + BL) * 0.25 - curr * 3.0;
 
       float next = (2.0 * curr - prev + uWaveSpeed * lap) * uDamping;
+
+      // Absorbing-boundary sponge — distance to nearest edge in normalized
+      // UV; 0 at the canvas edge, 0.5 at the center. smoothstep ramps the
+      // damping from uSpongeDamp at the edge up to 1.0 (no extra damping)
+      // by the time we're uSpongeWidth into the interior. Applied to the
+      // propagated wave term BEFORE the capsule stamp loop so impulses at
+      // the edge still land cleanly — only the outgoing wave dies.
+      float edgeDist = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
+      float spongeFactor = smoothstep(0.0, uSpongeWidth, edgeDist);
+      next *= mix(uSpongeDamp, 1.0, spongeFactor);
 
       // Branch-free capsule loop — bounds must be a compile-time constant in WebGL1.
       for (int i = 0; i < ${MAX_CAPSULES}; i++) {
@@ -351,6 +370,8 @@
       gl.uniform1f(prog.uniforms.uDamping, WAVE.DAMPING);
       gl.uniform1f(prog.uniforms.uRadius, WAVE.IMPULSE_RADIUS);
       gl.uniform1f(prog.uniforms.uAmp, WAVE.IMPULSE_AMP);
+      gl.uniform1f(prog.uniforms.uSpongeWidth, WAVE.SPONGE_WIDTH);
+      gl.uniform1f(prog.uniforms.uSpongeDamp, WAVE.SPONGE_DAMP);
       gl.uniform1f(prog.uniforms.uCount, merged.length);
       gl.uniform4fv(prog.uniforms.uCapsules, capData);
       gl.uniform1fv(prog.uniforms.uCapAmps, capAmps);

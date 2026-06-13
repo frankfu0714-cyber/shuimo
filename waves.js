@@ -34,13 +34,14 @@
   // ---------- Tuning constants (top of module so Frank can dial them) ----------
   const WAVE = {
     GRID_WIDTH: 512,        // height grid resolution; auto-aspected to canvas
-    // Tuned for "focused on the fingers, not the whole pool":
-    //   slower propagation + faster decay = visible motion stays within a
-    //   small radius of each finger and old positions don't keep ringing.
+    // "Focused on the fingers" — slower propagation + faster decay keep
+    // visible motion local to each finger. Amplitude + radius bumped so
+    // five-fingertip contact reads as five distinct strong ripples rather
+    // than a faint shimmer.
     WAVE_SPEED: 0.35,       // c² in (2H - H_prev + c²·∇²H) · damping
     DAMPING: 0.985,         // per-step exponential decay
-    IMPULSE_AMP: 0.08,      // capsule stamp height per frame (per-pixel inside cap)
-    IMPULSE_RADIUS: 0.022,  // capsule radius in normalized UV — tighter rings
+    IMPULSE_AMP: 0.14,      // capsule stamp height per frame (per-pixel inside cap)
+    IMPULSE_RADIUS: 0.032,  // capsule radius in normalized UV — readable rings
     // Absorbing-boundary "sponge" — without this, CLAMP_TO_EDGE sampling
     // makes waves reflect back from the canvas edges and the pool gets
     // chaotic. We instead damp aggressively in a thin margin around the
@@ -48,7 +49,7 @@
     // pool extended to infinity.
     SPONGE_WIDTH: 0.08,     // margin (normalized UV) over which sponge ramps in
     SPONGE_DAMP: 0.86,      // per-frame damping multiplier AT the edge
-    REFRACT: 0.55,          // wave gradient → ink UV offset multiplier
+    REFRACT: 0.75,          // wave gradient → ink UV offset multiplier (stronger distortion at finger contacts)
     LENS_GAIN: 0.9,         // Laplacian → brightness multiplier (crest magnify)
     NORMAL_SCALE: 2.6,      // gradient → surface normal scale (refraction physics)
     F0: 0.04,               // Schlick F0 for water

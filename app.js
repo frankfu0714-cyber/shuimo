@@ -79,7 +79,10 @@
       // Inks persist — water progressively muddies as drops accumulate.
       // The Clear button is the only way to reset.
       DENSITY_DISSIPATION: 0.0,
-      VELOCITY_DISSIPATION: 0.28,
+      // Velocity decays slowly so drag / waving / fingertip swirl
+      // carries momentum and ink spreads like real water (instead of
+      // damping out a quarter-second after the user moves).
+      VELOCITY_DISSIPATION: 0.05,
       PRESSURE: 0.8,
       PRESSURE_ITERATIONS: 20,
       CURL: 28,

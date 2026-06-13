@@ -32,17 +32,19 @@
   const PINCH_RATIO_OPEN = 0.60;          // hysteresis: must open past this to re-arm
   const SWIRL_FORCE_GAIN = 0.22;          // tuning knob for fingertip-driven velocity
   const TRAIL_STRENGTH = 0.0;             // M2 fingertip leaves no trail by default — pure swirl
-  const PALM_HOLD_DURATION_SEC = 1.5;     // open-palm hold to trigger Clear
-  const FIST_HOLD_DURATION_SEC = 0.8;     // fist hold to trigger Clear (faster, more deliberate)
-  const PALM_HOLD_DRIFT_MAX = 0.08;       // normalized drift that cancels the hold
+  const FIST_HOLD_DURATION_SEC = 0.8;     // fist hold to trigger Clear
+  const FIST_HOLD_DRIFT_MAX = 0.08;       // normalized drift that cancels the hold
   const FIST_RATIO_MAX = 0.6;             // tip-to-MCP / hand-scale below this = curled
-  // Fingertip ripples (visual + velocity pulse). All 5 fingertips per hand emit
-  // a soft expanding ring + a small radial velocity pulse every RIPPLE_INTERVAL_MS,
-  // *only* while the fingertip is stationary — moving fingers swirl, still fingers
-  // dip. Gated by RIPPLE_MOVE_GATE in normalized screen units.
-  const RIPPLE_INTERVAL_MS = 200;
-  const RIPPLE_MOVE_GATE = 0.022;
-  const RIPPLE_VELOCITY_MAG = 3.0;
+  /* Fingertip ripples — fluid-only now. Each fingertip emits a small velocity
+     pulse into the sim at a tight cadence, in a direction rotated by the
+     golden angle so consecutive pulses fan out radially. Vorticity
+     confinement turns the stream into visible ring-like ripples. Gated to
+     stationary fingertips (swirling fingers do something else). */
+  const RIPPLE_INTERVAL_MS = 75;
+  const RIPPLE_MOVE_GATE = 0.030;
+  const RIPPLE_VELOCITY_MAG = 6.0;
+  const RIPPLE_RADIUS_SCALE = 0.28;
+  const GOLDEN_ANGLE = 2.39996323;        // ≈137.5°
   const FINGERTIP_INDICES = [4, 8, 12, 16, 20];
 
   // ---------- State ----------
@@ -63,51 +65,12 @@
       lastTip: null,
       wasPinching: false,
       pinchArmed: true,
-      // Unified hold-to-clear state: works for either 'palm' or 'fist' kind.
+      // Fist-hold-to-clear state.
       holdStart: null,
       holdOrigin: null,
-      holdKind: null,
       // Per-fingertip ripple state, keyed by fingertip landmark index.
       tipState: new Map(),
     };
-  }
-
-  // ---------- Ripple pool ----------
-
-  // Reusable DOM elements per "${handKey}|${tipIndex}". Pool entries get
-  // re-positioned + re-animated on each emit; destroyed when their hand leaves.
-  const ripplePool = new Map();
-
-  function getRipple(key) {
-    let el = ripplePool.get(key);
-    if (el) return el;
-    el = document.createElement('div');
-    el.className = 'ripple';
-    document.body.appendChild(el);
-    ripplePool.set(key, el);
-    return el;
-  }
-
-  function destroyRipple(key) {
-    const el = ripplePool.get(key);
-    if (el) { el.remove(); ripplePool.delete(key); }
-  }
-
-  function emitRipple(key, screenX, screenY) {
-    const el = getRipple(key);
-    el.style.left = screenX + 'px';
-    el.style.top = screenY + 'px';
-    el.animate(
-      [
-        { transform: 'translate(-50%,-50%) scale(0.55)', opacity: 0.55 },
-        { transform: 'translate(-50%,-50%) scale(2.4)',  opacity: 0    },
-      ],
-      { duration: 650, easing: 'ease-out' }
-    );
-  }
-
-  function destroyAllRipples() {
-    for (const key of [...ripplePool.keys()]) destroyRipple(key);
   }
 
   // ---------- DOM ----------
@@ -149,22 +112,6 @@
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  function isOpenPalm(lm) {
-    // Non-thumb fingers: tip should be further from wrist than the PIP joint
-    // by at least 15% — a forgiving "extended" check robust to angled views.
-    const wrist = lm[0];
-    function ext(tip, pip) {
-      return dist2D(lm[tip], wrist) > dist2D(lm[pip], wrist) * 1.15;
-    }
-    if (!ext(8, 6)) return false;
-    if (!ext(12, 10)) return false;
-    if (!ext(16, 14)) return false;
-    if (!ext(20, 18)) return false;
-    // Thumb: tip further from index-MCP than the thumb IP joint.
-    const indexMcp = lm[5];
-    return dist2D(lm[4], indexMcp) > dist2D(lm[3], indexMcp) * 1.05;
-  }
-
   function isFist(lm) {
     // All four non-thumb fingertips curled in: dist(tip, MCP) tiny vs hand-scale.
     // Thumb can be wrapped or sticking out — we don't check it.
@@ -178,19 +125,14 @@
     );
   }
 
-  function palmCenterUV(lm) {
-    // Mean of wrist + the five MCP joints; mirrored horizontally.
+  function fistCenterUV(lm) {
+    // Mean of wrist + the five MCP joints (mirrored x, top-down y) — lands
+    // near the visual center of a closed hand.
     const xs = [lm[0].x, lm[5].x, lm[9].x, lm[13].x, lm[17].x];
     const ys = [lm[0].y, lm[5].y, lm[9].y, lm[13].y, lm[17].y];
     const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
     const my = ys.reduce((a, b) => a + b, 0) / ys.length;
     return { x: 1 - mx, y: my };
-  }
-
-  function fistCenterUV(lm) {
-    // For a closed hand, the four non-thumb MCPs + wrist mean lands near the
-    // visual center of the fist.
-    return palmCenterUV(lm);
   }
 
   // ---------- Per-frame processing ----------
@@ -249,86 +191,72 @@
         state.wasPinching = false;
       }
 
-      // Fingertip ripples — each of 5 fingertips emits an expanding ring + a
-      // small radial velocity pulse while stationary. Movement gate ensures
-      // fast-moving fingers swirl rather than ripple. Each tip is its own pool slot.
+      // Fingertip ripples — each of 5 fingertips dumps a small velocity
+      // pulse into the fluid sim while stationary. Direction rotates by the
+      // golden angle each pulse so the energy fans out radially over the
+      // next few emissions; vorticity confinement amplifies them into
+      // ring-like ripples in the water itself (no DOM overlay). Movement
+      // gate keeps fast-moving fingers from double-firing with the swirl.
       for (const tipIdx of FINGERTIP_INDICES) {
-        const tipKey = `${key}|${tipIdx}`;
-        const screen = { x: 1 - lm[tipIdx].x, y: lm[tipIdx].y }; // mirrored x, top-down y
-        const ts = state.tipState.get(tipIdx) || { last: null, lastEmit: 0 };
+        const uvX = 1 - lm[tipIdx].x;          // mirrored
+        const uvY = 1 - lm[tipIdx].y;          // fluid UV is bottom-up
+        const screenY = lm[tipIdx].y;          // top-down for motion gating
+        const ts = state.tipState.get(tipIdx) || { last: null, lastEmit: 0, angle: null };
         state.tipState.set(tipIdx, ts);
         const moved = ts.last
-          ? Math.hypot(screen.x - ts.last.x, screen.y - ts.last.y)
+          ? Math.hypot(uvX - ts.last.x, screenY - ts.last.y)
           : 0;
-        ts.last = screen;
+        ts.last = { x: uvX, y: screenY };
         if (now - ts.lastEmit < RIPPLE_INTERVAL_MS) continue;
         if (moved > RIPPLE_MOVE_GATE) continue;
-        // Visual ripple in screen space.
-        emitRipple(tipKey, screen.x * window.innerWidth, screen.y * window.innerHeight);
-        // Velocity pulse in fluid UV space (flip y).
-        const angle = Math.random() * Math.PI * 2;
-        api.splatVelocity(
-          screen.x,
-          1 - lm[tipIdx].y,
-          Math.cos(angle) * RIPPLE_VELOCITY_MAG,
-          Math.sin(angle) * RIPPLE_VELOCITY_MAG
+        ts.angle = (ts.angle == null ? Math.random() * Math.PI * 2 : ts.angle + GOLDEN_ANGLE);
+        const a = ts.angle;
+        api.splatRipple(
+          uvX,
+          uvY,
+          Math.cos(a) * RIPPLE_VELOCITY_MAG,
+          Math.sin(a) * RIPPLE_VELOCITY_MAG,
+          RIPPLE_RADIUS_SCALE
         );
         ts.lastEmit = now;
       }
     }
 
-    // Clean up state for hands no longer detected, including their ripple DOM.
+    // Clean up state for hands no longer detected.
     for (const k of [...handStates.keys()]) {
       if (!seen.has(k)) handStates.delete(k);
     }
-    for (const rKey of [...ripplePool.keys()]) {
-      const handKey = rKey.substring(0, rKey.lastIndexOf('|'));
-      if (!seen.has(handKey)) destroyRipple(rKey);
-    }
 
-    // Hold-to-clear — palm (slow, 1.5s) or fist (quick, 0.8s). Only meaningful
-    // when exactly one hand is up. Switching between palm↔fist resets the timer
-    // (the holdKind changes). Whichever pose the user commits to wins.
+    // Fist-hold-to-clear — only meaningful when exactly one hand is up.
     if (landmarks.length === 1) {
       const lm = landmarks[0];
-      const stateIter = handStates.values().next();
-      const state = stateIter.value;
-      const palm = isOpenPalm(lm);
-      const fist = !palm && isFist(lm);
-      if (state && (palm || fist)) {
-        const kind = palm ? 'palm' : 'fist';
-        const center = palm ? palmCenterUV(lm) : fistCenterUV(lm);
-        const duration = palm ? PALM_HOLD_DURATION_SEC : FIST_HOLD_DURATION_SEC;
-        if (!state.holdStart || state.holdKind !== kind) {
+      const state = handStates.values().next().value;
+      if (state && isFist(lm)) {
+        const center = fistCenterUV(lm);
+        if (!state.holdStart) {
           state.holdStart = now;
           state.holdOrigin = center;
-          state.holdKind = kind;
         } else {
           const drift = Math.hypot(center.x - state.holdOrigin.x, center.y - state.holdOrigin.y);
-          if (drift > PALM_HOLD_DRIFT_MAX) {
+          if (drift > FIST_HOLD_DRIFT_MAX) {
             state.holdStart = now;
             state.holdOrigin = center;
           }
         }
         const heldSec = (now - state.holdStart) / 1000;
-        showPalmRing(center, heldSec / duration);
-        if (heldSec >= duration) {
+        showPalmRing(center, heldSec / FIST_HOLD_DURATION_SEC);
+        if (heldSec >= FIST_HOLD_DURATION_SEC) {
           api.clearDye(1.0);
           state.holdStart = null;
-          state.holdKind = null;
           hidePalmRing();
         }
       } else if (state) {
         state.holdStart = null;
-        state.holdKind = null;
         hidePalmRing();
       }
     } else {
       hidePalmRing();
-      for (const s of handStates.values()) {
-        s.holdStart = null;
-        s.holdKind = null;
-      }
+      for (const s of handStates.values()) s.holdStart = null;
     }
   }
 
@@ -407,7 +335,7 @@
     running = true;
     lastDetect = 0;
     requestAnimationFrame(loop);
-    showToast('Gestures on · pinch to drop · open palm or fist to clear', 3500);
+    showToast('Gestures on · pinch to drop · fist to clear', 3500);
     maybePulseHelp();
   }
 
@@ -416,7 +344,6 @@
     cleanupStream();
     if (video) video.classList.remove('visible');
     hidePalmRing();
-    destroyAllRipples();
     handStates.clear();
     setState('off');
   }

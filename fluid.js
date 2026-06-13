@@ -560,6 +560,23 @@
       this.dye.swap();
     }
 
+    /* Tiny velocity splat at a custom radius scale — used by the M2 ripple
+       system to emit many fast, local pulses without touching SPLAT_RADIUS.
+       radiusScale multiplies the default SPLAT_RADIUS/100 (e.g. 0.28 →
+       about a quarter of a normal splat). */
+    splatRipple(x, y, dx, dy, radiusScale) {
+      const gl = this.gl;
+      const splat = this.programs.splat;
+      splat.bind();
+      gl.uniform1i(splat.uniforms.uTarget, this.velocity.read.attach(0));
+      gl.uniform1f(splat.uniforms.aspectRatio, gl.drawingBufferWidth / gl.drawingBufferHeight);
+      gl.uniform2f(splat.uniforms.point, x, y);
+      gl.uniform3f(splat.uniforms.color, dx, dy, 0);
+      gl.uniform1f(splat.uniforms.radius, this._correctRadius((this.config.SPLAT_RADIUS / 100) * radiusScale));
+      this._blit(this.velocity.write);
+      this.velocity.swap();
+    }
+
     /* Velocity-only splat (drag motions inject swirl without adding ink). */
     splatVelocity(x, y, dx, dy) {
       const gl = this.gl;

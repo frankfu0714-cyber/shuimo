@@ -141,25 +141,6 @@ html, body {
   50%      { box-shadow: 0 0 0 8px rgba(184, 51, 43, 0);    }
 }
 
-/* ---------- Fingertip ripples (M2 polish) ---------- */
-
-/* One element per stationary fingertip; expands + fades over ~650ms via
-   Web Animations API, repositioned at each emit. Sits above webcam, below
-   palm-ring + UI. */
-.ripple {
-  position: fixed;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(184, 51, 43, 0.65);
-  box-shadow: 0 0 12px rgba(184, 51, 43, 0.18) inset;
-  pointer-events: none;
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.55);
-  z-index: 3;
-  mix-blend-mode: multiply;
-}
-
 /* ---------- Help overlay ---------- */
 
 .help-overlay {

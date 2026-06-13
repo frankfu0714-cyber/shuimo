@@ -272,6 +272,7 @@
     absorbance,
     splat: (x, y, dx, dy, color) => sim.splat(x, y, dx, dy, color),
     splatVelocity: (x, y, dx, dy) => sim.splatVelocity(x, y, dx, dy),
+    splatRipple: (x, y, dx, dy, radiusScale) => sim.splatRipple(x, y, dx, dy, radiusScale),
     splatTrail: (x, y, color, strength) => sim.splatTrail(x, y, color, strength),
     clearDye: (sec) => sim.clearDye(sec),
     tap: (uv) => tap(uv),

@@ -28,8 +28,17 @@
     'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
   const DETECT_INTERVAL_MS = 33;          // ~30 fps detection (fluid stays 60 fps)
-  const PINCH_RATIO_CLOSE = 0.45;         // pinch-close threshold (relative to hand size)
-  const PINCH_RATIO_OPEN = 0.60;          // hysteresis: must open past this to re-arm
+  // Pinch detector — false positives were firing on relaxed hand poses
+  // because the old 0.45 ratio could be satisfied by a curled-up resting
+  // hand. Tightened: ratio must drop below 0.28 for a real fingertip
+  // touch, with a wider 0.55 open threshold. Plus a state machine that
+  // requires the hand to first be cleanly open for several frames and
+  // the closed state to persist for at least 2 frames before firing.
+  const PINCH_RATIO_CLOSE = 0.28;
+  const PINCH_RATIO_OPEN = 0.55;
+  const PINCH_OPEN_FRAMES_REQ = 4;        // clean-open debounce before arming
+  const PINCH_CLOSE_FRAMES_REQ = 2;       // close-state debounce before firing
+  const HAND_CONF_MIN = 0.70;             // skip jittery low-confidence hands
   const SWIRL_FORCE_GAIN = 0.22;          // tuning knob for fingertip-driven velocity
   const TRAIL_STRENGTH = 0.0;             // fingertip leaves no trail — pure swirl
   const FIST_HOLD_DURATION_SEC = 0.8;     // fist hold to trigger Clear
@@ -67,8 +76,12 @@
   function newHandState() {
     return {
       lastTip: null,
-      wasPinching: false,
-      pinchArmed: true,
+      // Pinch state machine. New hands start with hasBeenCleanlyOpen=false,
+      // so a user who enters the frame with an already-curled hand can't
+      // fire a phantom pinch — they have to show a clean open pose first.
+      pinchPhase: 'open',       // 'open' | 'closing' | 'closed'
+      pinchFramesInPhase: 0,
+      pinchHasBeenCleanlyOpen: false,
       // Fist-hold-to-clear state.
       holdStart: null,
       holdOrigin: null,
@@ -223,26 +236,55 @@
       }
       state.lastTip = tipUV;
 
-      // Pinch detection (edge-debounced with hysteresis). On close-edge we
-      // drop ink into the dye AND fire a one-shot wave pulse so the drop
-      // visibly rings out into the water.
-      const handScale = dist2D(lm[0], lm[9]) || 0.001;
-      const pinchRatio = dist2D(lm[4], lm[8]) / handScale;
-      if (state.pinchArmed && pinchRatio < PINCH_RATIO_CLOSE) {
-        // Pinch midpoint in raw landmark space, then aspect-mapped so the
-        // ink drop appears where the user actually pinched on screen.
-        const pinchUV = landmarkToWaveUV({
-          x: (lm[4].x + lm[8].x) * 0.5,
-          y: (lm[4].y + lm[8].y) * 0.5,
-        });
-        api.tap(pinchUV);
-        if (api.pulseWave) api.pulseWave(pinchUV, PINCH_PULSE_AMP);
-        api.dismissHint();
-        state.pinchArmed = false;
-        state.wasPinching = true;
-      } else if (!state.pinchArmed && pinchRatio > PINCH_RATIO_OPEN) {
-        state.pinchArmed = true;
-        state.wasPinching = false;
+      // Pinch detection — debounced state machine. Three gates protect
+      // against false positives:
+      //   1. Hand classification score must clear HAND_CONF_MIN.
+      //   2. Hand must have been *cleanly* open (ratio > OPEN) for
+      //      PINCH_OPEN_FRAMES_REQ consecutive frames before any close
+      //      event can fire. Resets when the hand leaves the frame.
+      //   3. Close state (ratio < CLOSE) must persist for
+      //      PINCH_CLOSE_FRAMES_REQ consecutive frames before firing —
+      //      one-frame landmark noise won't trigger.
+      // After a fire, hasBeenCleanlyOpen resets, requiring another
+      // clean open before the next pinch can fire.
+      const handScore = (handedness[i] && handedness[i][0] && handedness[i][0].score) || 0;
+      if (handScore >= HAND_CONF_MIN) {
+        const handScale = dist2D(lm[0], lm[9]) || 0.001;
+        const pinchRatio = dist2D(lm[4], lm[8]) / handScale;
+        if (pinchRatio > PINCH_RATIO_OPEN) {
+          if (state.pinchPhase !== 'open') {
+            state.pinchPhase = 'open';
+            state.pinchFramesInPhase = 0;
+          }
+          state.pinchFramesInPhase++;
+          if (state.pinchFramesInPhase >= PINCH_OPEN_FRAMES_REQ) {
+            state.pinchHasBeenCleanlyOpen = true;
+          }
+        } else if (pinchRatio < PINCH_RATIO_CLOSE && state.pinchHasBeenCleanlyOpen) {
+          if (state.pinchPhase !== 'closing' && state.pinchPhase !== 'closed') {
+            state.pinchPhase = 'closing';
+            state.pinchFramesInPhase = 0;
+          }
+          if (state.pinchPhase === 'closing') {
+            state.pinchFramesInPhase++;
+            if (state.pinchFramesInPhase >= PINCH_CLOSE_FRAMES_REQ) {
+              // FIRE — landmarks → aspect-aware UV so the drop lands at
+              // the visible pinch midpoint, not the raw image midpoint.
+              const pinchUV = landmarkToWaveUV({
+                x: (lm[4].x + lm[8].x) * 0.5,
+                y: (lm[4].y + lm[8].y) * 0.5,
+              });
+              api.tap(pinchUV);
+              if (api.pulseWave) api.pulseWave(pinchUV, PINCH_PULSE_AMP);
+              api.dismissHint();
+              state.pinchPhase = 'closed';
+              state.pinchFramesInPhase = 0;
+              state.pinchHasBeenCleanlyOpen = false;
+            }
+          }
+        }
+        // Else (hysteresis band, or close without prior clean-open): no
+        // state change, no fire.
       }
 
       // Fingertip → wave-field capsule. Each frame the five fingertips

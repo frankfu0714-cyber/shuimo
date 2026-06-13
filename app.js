@@ -284,4 +284,25 @@
   gestBtn.addEventListener('click', () => {
     if (window.Gestures && window.Gestures.toggle) window.Gestures.toggle();
   });
+
+  // ---------- Help overlay ----------
+
+  const helpBtn = document.getElementById('btn-help');
+  const helpOverlay = document.getElementById('help-overlay');
+  if (helpBtn && helpOverlay) {
+    const openHelp = () => {
+      helpOverlay.hidden = false;
+      // Move focus to the close button so Esc / Enter feel obvious.
+      const close = helpOverlay.querySelector('.help-close');
+      if (close) close.focus();
+    };
+    const closeHelp = () => { helpOverlay.hidden = true; helpBtn.focus(); };
+    helpBtn.addEventListener('click', openHelp);
+    helpOverlay.addEventListener('click', (e) => {
+      if (e.target.dataset && 'close' in e.target.dataset) closeHelp();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !helpOverlay.hidden) closeHelp();
+    });
+  }
 })();

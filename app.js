@@ -91,6 +91,10 @@
       PRESSURE_ITERATIONS: 20,
       CURL: 28,
       SPLAT_RADIUS: 0.20,
+      // Dye-drop knobs (independent of velocity splat). Live-tunable via
+      // FLUID.DYE_SPLAT_RADIUS and FLUID.DROP_INK_INTENSITY from devtools.
+      DYE_SPLAT_RADIUS: 0.36,
+      DROP_INK_INTENSITY: 1.5,
       SPLAT_FORCE: 6000,
       BACK_COLOR: BACK_COLOR,
     });
@@ -168,8 +172,11 @@
     const force = 3;
     const dx = Math.cos(angle) * force;
     const dy = Math.sin(angle) * force;
-    // intensity tuned so single tap is a visible drop but not opaque
-    const intensity = 0.85;
+    // Peak color magnitude per drop. Live-tunable via FLUID.DROP_INK_INTENSITY.
+    // The splat itself uses FLUID.DYE_SPLAT_RADIUS for puddle size.
+    const intensity = sim.config.DROP_INK_INTENSITY != null
+      ? sim.config.DROP_INK_INTENSITY
+      : 1.5;
     sim.splat(uv.x, uv.y, dx, dy, absorb.map((c) => c * intensity));
     // Tap rings the wave field — gently, so it doesn't blast the ink away.
     if (waves) waves.pulse(uv, 1.0);

@@ -452,6 +452,8 @@
         PRESSURE_ITERATIONS: 20,
         CURL: 28,
         SPLAT_RADIUS: 0.2,
+        DYE_SPLAT_RADIUS: 0.36,    // dye-only puddle size (≈1.8× velocity radius)
+        DROP_INK_INTENSITY: 1.5,    // peak color magnitude per ink drop
         SPLAT_FORCE: 6000,
         BACK_COLOR: [0.965, 0.948, 0.895],
       }, config || {});
@@ -578,7 +580,10 @@
 
     /* Splat dye + velocity at normalized (x, y) in [0,1].
        dx, dy are velocity (in screen-units / second-ish — tuned by SPLAT_FORCE).
-       color is absorbance vec3 (cream - inkColor) — host is responsible. */
+       color is absorbance vec3 (cream - inkColor) — host is responsible.
+       Velocity uses SPLAT_RADIUS (kept small so drag kicks stay tight); dye
+       uses DYE_SPLAT_RADIUS (larger by default so an ink drop reads as a
+       real puddle). The two are sized independently. */
     splat(x, y, dx, dy, color) {
       const gl = this.gl;
       const splat = this.programs.splat;
@@ -593,6 +598,7 @@
 
       gl.uniform1i(splat.uniforms.uTarget, this.dye.read.attach(0));
       gl.uniform3f(splat.uniforms.color, color[0], color[1], color[2]);
+      gl.uniform1f(splat.uniforms.radius, this._correctRadius(this.config.DYE_SPLAT_RADIUS / 100));
       this._blit(this.dye.write);
       this.dye.swap();
     }

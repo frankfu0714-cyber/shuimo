@@ -41,6 +41,96 @@ html, body {
   cursor: crosshair;
 }
 
+/* ---------- Webcam overlay (M2) ---------- */
+
+/* The video sits above the canvas, mirrored, in multiply blend so the ink
+   shows through the hand silhouette — user feels their hand is "in" the
+   water rather than floating over it. Hidden until gestures enabled. */
+#webcam {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  transform: scaleX(-1);
+  mix-blend-mode: multiply;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 0.45s ease;
+  /* Slight desaturation + warmth so the hand reads as part of the cream water. */
+  filter: saturate(0.55) contrast(1.05) brightness(1.05);
+}
+#webcam.visible {
+  opacity: 0.62;
+}
+
+/* Subtle progress ring around an open palm — fills clockwise as the hold
+   approaches 1.5s. Uses conic-gradient + radial mask for a clean ring. */
+#palm-ring {
+  position: fixed;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: conic-gradient(
+    rgba(184, 51, 43, 0.78) calc(var(--p, 0) * 360deg),
+    rgba(184, 51, 43, 0.08) 0
+  );
+  -webkit-mask: radial-gradient(circle, transparent 60%, black 62%);
+          mask: radial-gradient(circle, transparent 60%, black 62%);
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+  z-index: 4;
+}
+#palm-ring.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Lightweight inline status toast for gesture state changes. */
+#gesture-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(clamp(20px, 4vh, 36px) + 64px);
+  transform: translate(-50%, 8px);
+  padding: 8px 14px;
+  background: rgba(255, 252, 244, 0.92);
+  color: var(--ink);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 11;
+  max-width: min(420px, 80vw);
+  text-align: center;
+}
+#gesture-toast.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* Gesture button active / loading affordances. */
+.action.is-active {
+  background: rgba(184, 51, 43, 0.10);
+  color: var(--vermillion);
+}
+.action.is-active:hover:not(:disabled) {
+  background: rgba(184, 51, 43, 0.16);
+  color: var(--vermillion);
+}
+.action.is-loading {
+  cursor: progress;
+  opacity: 0.7;
+}
+
 /* ---------- Watermark ---------- */
 
 .watermark {

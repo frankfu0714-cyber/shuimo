@@ -76,7 +76,9 @@
     sim = new FluidSim(canvas, {
       SIM_RESOLUTION: 256,
       DYE_RESOLUTION: 1024,
-      DENSITY_DISSIPATION: 0.35,
+      // Inks persist — water progressively muddies as drops accumulate.
+      // The Clear button is the only way to reset.
+      DENSITY_DISSIPATION: 0.0,
       VELOCITY_DISSIPATION: 0.28,
       PRESSURE: 0.8,
       PRESSURE_ITERATIONS: 20,
@@ -260,4 +262,26 @@
   setTimeout(() => {
     sim.splat(0.5, 0.55, 0, 0, absorbance(INKS.indigo).map((c) => c * 0.5));
   }, 300);
+
+  // ---------- API surface for gestures.js ----------
+
+  window.shuimo = {
+    sim,
+    canvas,
+    currentInk: () => currentInkRGB(),
+    absorbance,
+    splat: (x, y, dx, dy, color) => sim.splat(x, y, dx, dy, color),
+    splatVelocity: (x, y, dx, dy) => sim.splatVelocity(x, y, dx, dy),
+    splatTrail: (x, y, color, strength) => sim.splatTrail(x, y, color, strength),
+    clearDye: (sec) => sim.clearDye(sec),
+    tap: (uv) => tap(uv),
+    dismissHint,
+  };
+
+  // ---------- Gestures button (M2) ----------
+
+  const gestBtn = document.getElementById('btn-gestures');
+  gestBtn.addEventListener('click', () => {
+    if (window.Gestures && window.Gestures.toggle) window.Gestures.toggle();
+  });
 })();

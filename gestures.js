@@ -130,14 +130,53 @@
     );
   }
 
+  /* Landmark → display coordinates.
+     MediaPipe returns landmarks in normalized [0,1] over the *raw* video
+     frame (e.g. 640×480, 4:3). The video element uses CSS `object-fit:
+     cover` to fill a typically-not-4:3 viewport, which scales-then-crops
+     the raw frame around its center. The browser shows a band of the raw
+     frame, not the whole thing — but MediaPipe still hands back coords
+     over the *whole* frame. The visible position of a landmark therefore
+     differs from `lm.y` (or `lm.x`) by exactly that crop. We invert it:
+     stretch the cropped axis around 0.5 by viewAspect/videoAspect (or
+     videoAspect/viewAspect, whichever crops). Then mirror x for the CSS
+     scaleX(-1). Returns top-down screen-normalized coords. */
+  function landmarkToScreenUV(lm) {
+    const vw = video ? video.videoWidth : 0;
+    const vh = video ? video.videoHeight : 0;
+    if (!vw || !vh) {
+      // Video metadata not loaded yet — best-effort 1:1 with mirror.
+      return { x: 1 - lm.x, y: lm.y };
+    }
+    const videoAspect = vw / vh;
+    const viewAspect = window.innerWidth / Math.max(1, window.innerHeight);
+    let dx = lm.x;
+    let dy = lm.y;
+    if (viewAspect > videoAspect) {
+      // Wider viewport: object-fit:cover crops top + bottom of raw video.
+      // Visible y range is narrower than [0,1]; stretch around the middle.
+      dy = 0.5 + (lm.y - 0.5) * (viewAspect / videoAspect);
+    } else if (viewAspect < videoAspect) {
+      // Taller viewport: cover crops left + right of raw video.
+      dx = 0.5 + (lm.x - 0.5) * (videoAspect / viewAspect);
+    }
+    return { x: 1 - dx, y: dy };
+  }
+
+  /* Same transform, expressed in wave/fluid UV (bottom-up y). All splat /
+     capsule / pulse / tap calls into the sim use this convention. */
+  function landmarkToWaveUV(lm) {
+    const s = landmarkToScreenUV(lm);
+    return { x: s.x, y: 1 - s.y };
+  }
+
   function fistCenterUV(lm) {
-    // Mean of wrist + the five MCP joints (mirrored x, top-down y) — lands
-    // near the visual center of a closed hand.
-    const xs = [lm[0].x, lm[5].x, lm[9].x, lm[13].x, lm[17].x];
-    const ys = [lm[0].y, lm[5].y, lm[9].y, lm[13].y, lm[17].y];
-    const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
-    const my = ys.reduce((a, b) => a + b, 0) / ys.length;
-    return { x: 1 - mx, y: my };
+    // Mean of wrist + the five MCP joints in raw-landmark space, then
+    // mapped through landmarkToScreenUV so the palm progress ring lands
+    // at the visible fist position (top-down for DOM placement).
+    const mx = (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5;
+    const my = (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5;
+    return landmarkToScreenUV({ x: mx, y: my });
   }
 
   // ---------- Per-frame processing ----------
@@ -165,9 +204,9 @@
       const state = handStates.get(key) || newHandState();
       handStates.set(key, state);
 
-      // Index fingertip → swirl
-      // Mirror x; flip y (image y goes top-down, fluid UV goes bottom-up).
-      const tipUV = { x: 1 - lm[8].x, y: 1 - lm[8].y };
+      // Index fingertip → swirl. Aspect-aware mapping so the velocity push
+      // lands exactly where the user sees the fingertip on screen.
+      const tipUV = landmarkToWaveUV(lm[8]);
       if (state.lastTip) {
         const dx = tipUV.x - state.lastTip.x;
         const dy = tipUV.y - state.lastTip.y;
@@ -190,10 +229,14 @@
       const handScale = dist2D(lm[0], lm[9]) || 0.001;
       const pinchRatio = dist2D(lm[4], lm[8]) / handScale;
       if (state.pinchArmed && pinchRatio < PINCH_RATIO_CLOSE) {
-        const mx = 1 - (lm[4].x + lm[8].x) * 0.5;
-        const my = 1 - (lm[4].y + lm[8].y) * 0.5;
-        api.tap({ x: mx, y: my });
-        if (api.pulseWave) api.pulseWave({ x: mx, y: my }, PINCH_PULSE_AMP);
+        // Pinch midpoint in raw landmark space, then aspect-mapped so the
+        // ink drop appears where the user actually pinched on screen.
+        const pinchUV = landmarkToWaveUV({
+          x: (lm[4].x + lm[8].x) * 0.5,
+          y: (lm[4].y + lm[8].y) * 0.5,
+        });
+        api.tap(pinchUV);
+        if (api.pulseWave) api.pulseWave(pinchUV, PINCH_PULSE_AMP);
         api.dismissHint();
         state.pinchArmed = false;
         state.wasPinching = true;
@@ -208,11 +251,9 @@
       // motion elongates the capsule into a bow-wave; stationary tips
       // produce clean circular ripples (capsule degenerates to a point).
       for (const tipIdx of FINGERTIP_INDICES) {
-        const uvX = 1 - lm[tipIdx].x;          // mirrored
-        const uvY = 1 - lm[tipIdx].y;          // wave/fluid UV is bottom-up
+        const curr = landmarkToWaveUV(lm[tipIdx]);
         const ts = state.tipState.get(tipIdx) || { prev: null };
         state.tipState.set(tipIdx, ts);
-        const curr = { x: uvX, y: uvY };
         const prev = ts.prev || curr;          // first frame: zero-length capsule
         fingertips.push({ curr, prev });
         ts.prev = curr;

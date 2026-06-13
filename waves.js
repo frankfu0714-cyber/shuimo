@@ -41,7 +41,7 @@
     WAVE_SPEED: 0.35,       // c² in (2H - H_prev + c²·∇²H) · damping
     DAMPING: 0.985,         // per-step exponential decay
     IMPULSE_AMP: 0.14,      // capsule stamp height per frame (per-pixel inside cap)
-    IMPULSE_RADIUS: 0.032,  // capsule radius in normalized UV — readable rings
+    IMPULSE_RADIUS: 0.055,  // capsule radius in normalized UV — each fingertip ring reads distinctly
     // Absorbing-boundary "sponge" — without this, CLAMP_TO_EDGE sampling
     // makes waves reflect back from the canvas edges and the pool gets
     // chaotic. We instead damp aggressively in a thin margin around the

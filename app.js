@@ -85,12 +85,14 @@
       VELOCITY_DISSIPATION: 0.05,
       // Dye diffuses on its own — a still drop softens and slowly blooms
       // outward over many seconds, like real ink in still water. Live-
-      // tunable as window.FLUID.DYE_DIFFUSION.
-      DYE_DIFFUSION: 0.10,
+      // tunable as window.FLUID.DYE_DIFFUSION. Kept gentle: ambient
+      // turbulence carries dye physically, so we don't lean on local
+      // averaging too hard (otherwise drops "fade" instead of moving).
+      DYE_DIFFUSION: 0.06,
       // Ambient water turbulence — tiny divergence-free curl-noise velocity
       // injected each step so existing dye drifts and swirls even with no
       // user input. Live-tunable as FLUID.AMBIENT_STRENGTH / SCALE / SPEED.
-      AMBIENT_STRENGTH: 0.04,
+      AMBIENT_STRENGTH: 0.05,
       AMBIENT_SCALE: 2.5,
       AMBIENT_SPEED: 0.08,
       PRESSURE: 0.8,
@@ -100,7 +102,9 @@
       // Dye-drop knobs (independent of velocity splat). Live-tunable via
       // FLUID.DYE_SPLAT_RADIUS and FLUID.DROP_INK_INTENSITY from devtools.
       DYE_SPLAT_RADIUS: 0.36,
-      DROP_INK_INTENSITY: 1.5,
+      // Each drop carries more ink — survives the diffusion + ambient
+      // turbulence longer so visible identity persists.
+      DROP_INK_INTENSITY: 1.7,
       SPLAT_FORCE: 6000,
       BACK_COLOR: BACK_COLOR,
     });

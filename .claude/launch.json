@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shuimo",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5731", "--bind", "127.0.0.1"],
+      "port": 5731,
+      "cwd": "/Users/frank/shuimo"
+    }
+  ]
+}

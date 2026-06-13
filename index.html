@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>水墨 · shuimo</title>
+  <meta name="theme-color" content="#f4ede0" />
+  <meta name="description" content="水墨 — ink in water, a real-time fluid simulation." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="stage" aria-label="Ink in water canvas"></canvas>
+
+  <aside class="watermark" aria-hidden="true">
+    <span class="kanji">水</span>
+    <span class="kanji">墨</span>
+    <span class="hanko" aria-hidden="true">墨</span>
+  </aside>
+
+  <div id="hint" class="hint" role="status" aria-live="polite">
+    <span class="hint-en">Tap to drop ink &middot; Drag to swirl</span>
+    <span class="hint-jp">触れて広がる</span>
+  </div>
+
+  <nav class="panel" aria-label="Controls">
+    <div class="swatches" role="radiogroup" aria-label="Ink color">
+      <button class="swatch" data-color="indigo"    role="radio" aria-checked="true"  aria-label="Indigo"    style="--c:#1B3A6B"></button>
+      <button class="swatch" data-color="jade"      role="radio" aria-checked="false" aria-label="Jade"      style="--c:#2D6A4F"></button>
+      <button class="swatch" data-color="mustard"   role="radio" aria-checked="false" aria-label="Mustard"   style="--c:#D4A017"></button>
+      <button class="swatch" data-color="vermillion" role="radio" aria-checked="false" aria-label="Vermillion" style="--c:#C53030"></button>
+      <button class="swatch rainbow" data-color="rainbow" role="radio" aria-checked="false" aria-label="Rainbow cycle"></button>
+    </div>
+    <div class="divider" aria-hidden="true"></div>
+    <div class="actions">
+      <button class="action" id="btn-clear" type="button" title="Clear water">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M9 6V4h6v2m-1 0v13m-4-13v13M7 6l1 14h8l1-14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Clear</span>
+      </button>
+      <button class="action" id="btn-save" type="button" title="Save PNG">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Save</span>
+      </button>
+      <button class="action" id="btn-gestures" type="button" title="Webcam gestures (coming soon)" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11V6.5a1.5 1.5 0 013 0V11m0 0V4.5a1.5 1.5 0 013 0V12m0-1.5a1.5 1.5 0 013 0V15a6 6 0 01-6 6h-1.2a4 4 0 01-3-1.3L6 16l1.5-1.5a1 1 0 011.4 0L10 16V6.5a1.5 1.5 0 011-1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Gestures</span>
+        <em class="badge">soon</em>
+      </button>
+    </div>
+  </nav>
+
+  <noscript>
+    <p style="position:fixed;inset:0;display:grid;place-items:center;font-family:serif;color:#3a3a3a;">
+      水墨 requires JavaScript and WebGL.
+    </p>
+  </noscript>
+
+  <script src="fluid.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

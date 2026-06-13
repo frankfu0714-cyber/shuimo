@@ -333,7 +333,7 @@
       console.warn('[shuimo] camera denied:', err);
       const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
       setState(denied ? 'denied' : 'failed');
-      showToast(denied ? 'No camera — mouse and touch still work.' : 'Camera failed — try again.');
+      showToast(denied ? tr('gestures.toast.denied') : tr('gestures.toast.failed'));
       cleanupStream();
       return;
     }
@@ -362,7 +362,7 @@
       } catch (err) {
         console.warn('[shuimo] MediaPipe load failed:', err);
         setState('failed');
-        showToast('MediaPipe could not load — check your network.');
+        showToast(tr('gestures.toast.failed'));
         cleanupStream();
         return;
       }
@@ -373,7 +373,7 @@
     running = true;
     lastDetect = 0;
     requestAnimationFrame(loop);
-    showToast('Gestures on · pinch to drop · fist to clear', 3500);
+    showToast(tr('gestures.toast.enabled'), 3500);
     maybePulseHelp();
   }
 
@@ -415,6 +415,10 @@
 
   // ---------- Button state ----------
 
+  function tr(key) {
+    return (window.shuimo && window.shuimo.t) ? window.shuimo.t(key) : key;
+  }
+
   function setState(s) {
     internalState = s;
     const btn = document.getElementById('btn-gestures');
@@ -424,13 +428,17 @@
     btn.classList.toggle('is-loading', s === 'loading');
     btn.disabled = (s === 'loading');
     switch (s) {
-      case 'off':     if (label) label.textContent = 'Gestures'; break;
-      case 'loading': if (label) label.textContent = 'Loading…'; break;
-      case 'on':      if (label) label.textContent = 'Disable'; break;
-      case 'denied':  if (label) label.textContent = 'No camera'; setTimeout(() => internalState === 'denied' && setState('off'), 2500); break;
-      case 'failed':  if (label) label.textContent = 'Failed'; setTimeout(() => internalState === 'failed' && setState('off'), 2500); break;
+      case 'off':     if (label) label.textContent = tr('gestures.button'); break;
+      case 'loading': if (label) label.textContent = tr('gestures.loading'); break;
+      case 'on':      if (label) label.textContent = tr('gestures.disable'); break;
+      case 'denied':  if (label) label.textContent = tr('gestures.denied.label'); setTimeout(() => internalState === 'denied' && setState('off'), 2500); break;
+      case 'failed':  if (label) label.textContent = tr('gestures.failed.label'); setTimeout(() => internalState === 'failed' && setState('off'), 2500); break;
     }
   }
+
+  // Re-run setState for the current state so its label picks up a freshly
+  // translated string after a language toggle.
+  function refreshLabels() { setState(internalState); }
 
   // ---------- Init ----------
 
@@ -458,6 +466,7 @@
     enable,
     disable,
     getFingertips,
+    refreshLabels,
     get state() { return internalState; },
   };
 })();

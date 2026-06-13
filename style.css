@@ -117,6 +117,18 @@ html, body {
   transform: translate(-50%, 0);
 }
 
+/* Language-toggle fade — briefly hides all translatable labels during the
+   text swap so it reads as a graceful crossfade instead of a snap. */
+.lang-fading [data-i18n],
+.lang-fading .action-label,
+.lang-fading .help-title,
+.lang-fading .help-text strong,
+.lang-fading .help-text small,
+.lang-fading .help-foot {
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
 /* Gesture button active / loading affordances. */
 .action.is-active {
   background: rgba(184, 51, 43, 0.10);

@@ -3,6 +3,130 @@
 (function () {
   'use strict';
 
+  // ---------- i18n ----------
+
+  // Traditional Chinese (zh-Hant) + English. All user-facing strings live
+  // here; markup uses data-i18n / data-i18n-aria / data-i18n-title to bind.
+  const STRINGS = {
+    en: {
+      'canvas.label':              'Ink in water canvas',
+      'controls.label':            'Controls',
+      'swatches.label':            'Ink color',
+      'swatch.indigo':             'Indigo',
+      'swatch.jade':               'Jade',
+      'swatch.mustard':            'Mustard',
+      'swatch.vermillion':         'Vermillion',
+      'swatch.rainbow':            'Rainbow',
+      'clear':                     'Clear',
+      'clear.tooltip':             'Clear water',
+      'save':                      'Save',
+      'save.tooltip':              'Save PNG',
+      'gestures.button':           'Gestures',
+      'gestures.loading':          'Loading…',
+      'gestures.disable':          'Disable',
+      'gestures.denied.label':     'No camera',
+      'gestures.failed.label':     'Failed',
+      'gestures.tooltip':          'Toggle webcam gestures',
+      'gestures.toast.enabled':    'Gestures on · pinch to drop · fist to clear',
+      'gestures.toast.denied':     'No camera, no problem — mouse / touch still works',
+      'gestures.toast.failed':     'Could not load gestures',
+      'help':                      '?',
+      'help.tooltip':              'Gesture guide',
+      'help.title':                'Gestures',
+      'help.stir.title':           'Stir',
+      'help.stir.body':            'Move your fingertip — the water swirls around you.',
+      'help.drop.title':           'Drop ink',
+      'help.drop.body':            'Pinch thumb + index. One drop in the selected color.',
+      'help.clear.title':          'Clear',
+      'help.clear.body':           'Close into a fist for 0.8 seconds.',
+      'help.mouse.title':          'Mouse / touch',
+      'help.mouse.body':           'Tap to drop, drag to swirl. Always works, even without webcam.',
+      'help.foot.pre':             'Tap outside or press ',
+      'help.foot.post':            ' to close.',
+      'lang':                      '中',
+      'lang.tooltip':              'Switch language',
+      'hint.center':               'Tap to drop ink · Drag to swirl',
+      'noscript':                  '水墨 requires JavaScript and WebGL.',
+    },
+    zh: {
+      'canvas.label':              '水墨畫布',
+      'controls.label':            '控制面板',
+      'swatches.label':            '墨色選擇',
+      'swatch.indigo':             '藍靛',
+      'swatch.jade':               '翠綠',
+      'swatch.mustard':            '鵝黃',
+      'swatch.vermillion':         '朱紅',
+      'swatch.rainbow':            '七彩',
+      'clear':                     '清除',
+      'clear.tooltip':             '清除水面',
+      'save':                      '儲存',
+      'save.tooltip':              '儲存為 PNG',
+      'gestures.button':           '手勢',
+      'gestures.loading':          '載入中…',
+      'gestures.disable':          '停用',
+      'gestures.denied.label':     '無攝影機',
+      'gestures.failed.label':     '載入失敗',
+      'gestures.tooltip':          '切換手勢',
+      'gestures.toast.enabled':    '手勢已開啟 · 捏合滴墨 · 握拳清除',
+      'gestures.toast.denied':     '沒關係 — 滑鼠 / 觸控仍可使用',
+      'gestures.toast.failed':     '手勢載入失敗',
+      'help':                      '?',
+      'help.tooltip':              '手勢說明',
+      'help.title':                '手勢說明',
+      'help.stir.title':           '攪動',
+      'help.stir.body':            '移動指尖 — 水會在你周圍旋轉。',
+      'help.drop.title':           '滴墨',
+      'help.drop.body':            '拇指與食指捏合，會滴下選定顏色的墨水。',
+      'help.clear.title':          '清除',
+      'help.clear.body':           '握拳維持 0.8 秒。',
+      'help.mouse.title':          '滑鼠 / 觸控',
+      'help.mouse.body':           '點擊滴墨，拖曳攪動。即使沒有開啟攝影機也能使用。',
+      'help.foot.pre':             '點擊外側或按 ',
+      'help.foot.post':            ' 鍵關閉。',
+      'lang':                      'EN',
+      'lang.tooltip':              '切換語言',
+      'hint.center':               '點擊滴墨 · 拖曳攪動',
+      'noscript':                  '水墨需要 JavaScript 與 WebGL。',
+    },
+  };
+
+  let currentLang = 'en';
+  function t(key) {
+    const d = STRINGS[currentLang] || STRINGS.en;
+    return d[key] != null ? d[key] : (STRINGS.en[key] != null ? STRINGS.en[key] : key);
+  }
+  function detectInitialLang() {
+    try {
+      const saved = localStorage.getItem('shuimo.lang');
+      if (saved === 'en' || saved === 'zh') return saved;
+    } catch (e) {}
+    return (navigator.language || 'en').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  }
+  function applyLang(lang) {
+    currentLang = lang;
+    document.documentElement.lang = lang === 'zh' ? 'zh-Hant' : 'en';
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      el.textContent = t(el.dataset.i18n);
+    });
+    document.querySelectorAll('[data-i18n-aria]').forEach((el) => {
+      el.setAttribute('aria-label', t(el.dataset.i18nAria));
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+      el.setAttribute('title', t(el.dataset.i18nTitle));
+    });
+    if (window.Gestures && window.Gestures.refreshLabels) window.Gestures.refreshLabels();
+  }
+  function setLang(lang) {
+    if (lang === currentLang) return;
+    try { localStorage.setItem('shuimo.lang', lang); } catch (e) {}
+    // Subtle fade across all translatable labels during the swap.
+    document.body.classList.add('lang-fading');
+    setTimeout(() => {
+      applyLang(lang);
+      document.body.classList.remove('lang-fading');
+    }, 180);
+  }
+
   // ---------- Color palette ----------
 
   // Cream "water" base — slightly warm with a hint of cool. RGB in [0,1].
@@ -101,10 +225,10 @@
       SPLAT_RADIUS: 0.20,
       // Dye-drop knobs (independent of velocity splat). Live-tunable via
       // FLUID.DYE_SPLAT_RADIUS and FLUID.DROP_INK_INTENSITY from devtools.
-      DYE_SPLAT_RADIUS: 0.36,
+      DYE_SPLAT_RADIUS: 0.50,
       // Each drop carries more ink — survives the diffusion + ambient
       // turbulence longer so visible identity persists.
-      DROP_INK_INTENSITY: 1.7,
+      DROP_INK_INTENSITY: 2.0,
       SPLAT_FORCE: 6000,
       BACK_COLOR: BACK_COLOR,
     });
@@ -353,6 +477,9 @@
     tap: (uv) => tap(uv),
     pulseWave: (uv, ampMul) => { if (waves) waves.pulse(uv, ampMul); },
     dismissHint,
+    t,
+    lang: () => currentLang,
+    setLang,
   };
 
   // ---------- Gestures button (M2) ----------
@@ -361,6 +488,16 @@
   gestBtn.addEventListener('click', () => {
     if (window.Gestures && window.Gestures.toggle) window.Gestures.toggle();
   });
+
+  // ---------- Language toggle ----------
+
+  applyLang(detectInitialLang());
+  const langBtn = document.getElementById('btn-lang');
+  if (langBtn) {
+    langBtn.addEventListener('click', () => {
+      setLang(currentLang === 'zh' ? 'en' : 'zh');
+    });
+  }
 
   // ---------- Help overlay ----------
 

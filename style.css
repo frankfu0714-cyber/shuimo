@@ -429,6 +429,76 @@ html, body {
   background: conic-gradient(from 0deg, #C53030, #D4A017, #2D6A4F, #1B3A6B, #6B2D6A, #C53030);
 }
 
+/* ---------- Palette edit mode ---------- */
+
+/* × button overlaid on each removable swatch; hidden unless editing. */
+.swatch-x {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--vermillion);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 600;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.swatches.editing .swatch-x {
+  display: flex;
+  pointer-events: auto;
+}
+/* Subtle "editable" wiggle on hover in edit mode. */
+.swatches.editing .swatch:not(.swatch-add):not(.rainbow):hover {
+  transform: scale(1.12);
+}
+/* In edit mode, the selection ring is dropped so the × hit target reads cleanly. */
+.swatches.editing .swatch[aria-checked="true"] {
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.18);
+}
+
+/* "+" slot — dashed outline matching the panel's border vibe. */
+.swatch.swatch-add {
+  background: transparent;
+  border: 1.5px dashed rgba(60, 50, 30, 0.32);
+  box-shadow: none;
+  color: rgba(60, 50, 30, 0.55);
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.swatch.swatch-add:hover {
+  border-color: var(--vermillion);
+  color: var(--vermillion);
+  transform: scale(1.08);
+}
+.swatch.swatch-add .swatch-x { display: none !important; }
+
+/* Hidden native color picker — we trigger it from a swatch click. */
+#palette-picker {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Mobile: ensure tap targets stay >= 36px. */
+@media (max-width: 480px) {
+  .swatch { width: 32px; height: 32px; }
+  .swatches.editing .swatch { width: 36px; height: 36px; }
+  .swatch-x { width: 18px; height: 18px; font-size: 14px; top: -6px; right: -6px; }
+}
+
 .divider {
   width: 1px;
   height: 22px;

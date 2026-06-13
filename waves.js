@@ -89,6 +89,7 @@
     uniform float uAmp;
     uniform float uSpongeWidth;
     uniform float uSpongeDamp;
+    uniform float uAspect;                      // canvas width / height
     uniform vec4 uCapsules[${MAX_CAPSULES}];   // .xy = curr, .zw = prev
     uniform float uCapAmps[${MAX_CAPSULES}];   // per-capsule amp multiplier
     uniform float uCount;                       // float (branch-free with step())
@@ -123,13 +124,21 @@
       next *= mix(uSpongeDamp, 1.0, spongeFactor);
 
       // Branch-free capsule loop — bounds must be a compile-time constant in WebGL1.
+      // KEY: scale x by uAspect so the capsule SDF measures distance in equal
+      // physical units. Without this, vUv is anisotropic on non-square
+      // viewports (vUv = 0.05 is more physical pixels horizontally than
+      // vertically on landscape) and the stamp lands as a horizontal ellipse;
+      // the wave equation then propagates that ellipse as elliptical ripples.
+      // With the scale, a circle of radius uRadius in this space is a true
+      // physical-pixel circle on the canvas regardless of viewport aspect.
+      vec2 aspectScale = vec2(uAspect, 1.0);
       for (int i = 0; i < ${MAX_CAPSULES}; i++) {
         float active = step(float(i), uCount - 0.5);
         vec4 cap = uCapsules[i];
         vec2 a = cap.xy;
         vec2 b = cap.zw;
-        vec2 pa = vUv - a;
-        vec2 ba = b - a;
+        vec2 pa = (vUv - a) * aspectScale;
+        vec2 ba = (b - a) * aspectScale;
         float t = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
         float d = length(pa - ba * t);
         float intensity = uAmp * uCapAmps[i] * (1.0 - smoothstep(uRadius * 0.55, uRadius, d));
@@ -373,6 +382,13 @@
       gl.uniform1f(prog.uniforms.uAmp, WAVE.IMPULSE_AMP);
       gl.uniform1f(prog.uniforms.uSpongeWidth, WAVE.SPONGE_WIDTH);
       gl.uniform1f(prog.uniforms.uSpongeDamp, WAVE.SPONGE_DAMP);
+      // Aspect-correct the capsule SDF — drawingBufferWidth/Height auto-update
+      // when the canvas resizes, so this picks up landscape ↔ portrait swaps
+      // for free on each step.
+      gl.uniform1f(
+        prog.uniforms.uAspect,
+        gl.drawingBufferWidth / Math.max(1, gl.drawingBufferHeight)
+      );
       gl.uniform1f(prog.uniforms.uCount, merged.length);
       gl.uniform4fv(prog.uniforms.uCapsules, capData);
       gl.uniform1fv(prog.uniforms.uCapAmps, capAmps);

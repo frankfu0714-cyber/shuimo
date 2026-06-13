@@ -28,14 +28,20 @@
 
   <nav class="panel" data-i18n-aria="controls.label" aria-label="Controls">
     <div class="swatches" role="radiogroup" data-i18n-aria="swatches.label" aria-label="Ink color">
-      <button class="swatch" data-color="indigo"    role="radio" aria-checked="true"  data-i18n-aria="swatch.indigo"     aria-label="Indigo"    style="--c:#1B3A6B"></button>
-      <button class="swatch" data-color="jade"      role="radio" aria-checked="false" data-i18n-aria="swatch.jade"       aria-label="Jade"      style="--c:#2D6A4F"></button>
-      <button class="swatch" data-color="mustard"   role="radio" aria-checked="false" data-i18n-aria="swatch.mustard"    aria-label="Mustard"   style="--c:#D4A017"></button>
-      <button class="swatch" data-color="vermillion" role="radio" aria-checked="false" data-i18n-aria="swatch.vermillion" aria-label="Vermillion" style="--c:#C53030"></button>
-      <button class="swatch rainbow" data-color="rainbow" role="radio" aria-checked="false" data-i18n-aria="swatch.rainbow" aria-label="Rainbow cycle"></button>
+      <!-- Swatches are rendered by app.js renderSwatches() from a mutable palette
+           array (default 4 + rainbow) so Edit-mode can add / remove / recolor. -->
     </div>
+    <input type="color" id="palette-picker" hidden tabindex="-1" aria-hidden="true" />
     <div class="divider" aria-hidden="true"></div>
     <div class="actions">
+      <button class="action" id="btn-edit-palette" type="button" data-i18n-title="edit.tooltip" title="Customize ink palette">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5V20h2.5l9.6-9.6-2.5-2.5L4 17.5zm14.7-9.4a1 1 0 000-1.4l-1.4-1.4a1 1 0 00-1.4 0l-1.3 1.3 2.8 2.8 1.3-1.3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="action-label" data-i18n="edit_palette">Edit palette</span>
+      </button>
+      <button class="action" id="btn-reset-palette" type="button" data-i18n-title="reset.tooltip" title="Reset to default colors" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="action-label" data-i18n="reset">Reset</span>
+      </button>
       <button class="action" id="btn-clear" type="button" data-i18n-title="clear.tooltip" title="Clear water">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M9 6V4h6v2m-1 0v13m-4-13v13M7 6l1 14h8l1-14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span class="action-label" data-i18n="clear">Clear</span>

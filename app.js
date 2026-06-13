@@ -47,6 +47,14 @@
       'lang.tooltip':              'Switch language',
       'hint.center':               'Tap to drop ink · Drag to swirl',
       'noscript':                  '水墨 requires JavaScript and WebGL.',
+      'edit_palette':              'Edit palette',
+      'edit.tooltip':              'Customize ink palette',
+      'done':                      'Done',
+      'reset':                     'Reset',
+      'reset.tooltip':             'Reset to default colors',
+      'add_color':                 'Add color',
+      'swatch.remove':             'Remove color',
+      'swatch.custom':             'Custom color',
     },
     zh: {
       'canvas.label':              '水墨畫布',
@@ -87,6 +95,14 @@
       'lang.tooltip':              '切換語言',
       'hint.center':               '點擊滴墨 · 拖曳攪動',
       'noscript':                  '水墨需要 JavaScript 與 WebGL。',
+      'edit_palette':              '編輯顏色',
+      'edit.tooltip':              '自訂墨色',
+      'done':                      '完成',
+      'reset':                     '重設',
+      'reset.tooltip':             '回復預設顏色',
+      'add_color':                 '新增顏色',
+      'swatch.remove':             '移除顏色',
+      'swatch.custom':             '自訂顏色',
     },
   };
 
@@ -132,17 +148,56 @@
   // Cream "water" base — slightly warm with a hint of cool. RGB in [0,1].
   const BACK_COLOR = [0.965, 0.948, 0.895];
 
-  // Classical inks, RGB in [0,1].
-  const INKS = {
-    indigo:     hexToRGB('#1B3A6B'),
-    jade:       hexToRGB('#2D6A4F'),
-    mustard:    hexToRGB('#D4A017'),
-    vermillion: hexToRGB('#C53030'),
-  };
+  // Original 4 classical inks — used as the default palette and as the
+  // "Reset" target. Each entry has an i18n key so the aria-label translates;
+  // user-added colors carry only their hex (aria-labelled by the hex string).
+  const DEFAULT_PALETTE = [
+    { id: 'indigo',     hex: '#1B3A6B', i18n: 'swatch.indigo' },
+    { id: 'jade',       hex: '#2D6A4F', i18n: 'swatch.jade' },
+    { id: 'mustard',    hex: '#D4A017', i18n: 'swatch.mustard' },
+    { id: 'vermillion', hex: '#C53030', i18n: 'swatch.vermillion' },
+  ];
+  const MAX_PALETTE = 6;
+  const NEW_COLOR_DEFAULT = '#E879A8';   // soft pink for newly-added slots
 
   function hexToRGB(hex) {
     const n = parseInt(hex.slice(1), 16);
     return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
+  }
+
+  function isValidHex(h) { return typeof h === 'string' && /^#[0-9A-Fa-f]{6}$/.test(h); }
+
+  // Mutable palette state — restored from localStorage on first render,
+  // saved on every change. Each entry is { id, hex, i18n? }.
+  let palette = (function load() {
+    try {
+      const raw = localStorage.getItem('shuimo.palette');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = [];
+          for (const p of parsed) {
+            if (p && typeof p.id === 'string' && isValidHex(p.hex)) {
+              const def = DEFAULT_PALETTE.find((d) => d.id === p.id);
+              cleaned.push(def
+                ? { id: p.id, hex: p.hex, i18n: def.i18n }
+                : { id: p.id, hex: p.hex });
+            }
+          }
+          if (cleaned.length > 0) return cleaned;
+        }
+      }
+    } catch (e) {}
+    return DEFAULT_PALETTE.map((p) => ({ ...p }));
+  })();
+
+  function savePalette() {
+    try {
+      localStorage.setItem(
+        'shuimo.palette',
+        JSON.stringify(palette.map((p) => ({ id: p.id, hex: p.hex })))
+      );
+    } catch (e) {}
   }
 
   /* Absorbance = how much each channel removes from the cream background.
@@ -259,21 +314,166 @@
     if (waves) waves.resize(sim.gl.drawingBufferWidth, sim.gl.drawingBufferHeight);
   });
 
-  // ---------- Color selection ----------
+  // ---------- Color selection + palette editor ----------
 
-  let currentColorKey = 'indigo';
-  const swatches = document.querySelectorAll('.swatch');
-  swatches.forEach((sw) => {
-    sw.addEventListener('click', () => {
-      currentColorKey = sw.dataset.color;
-      swatches.forEach((s) => s.setAttribute('aria-checked', s === sw ? 'true' : 'false'));
-    });
-  });
+  let currentColorKey = palette[0] ? palette[0].id : 'rainbow';
+  let editingPalette = false;
+  let pickerTargetId = null;     // which slot the hidden <input type=color> is editing
+  const swatchesEl = document.querySelector('.swatches');
+  const picker = document.getElementById('palette-picker');
 
   function currentInkRGB() {
     if (currentColorKey === 'rainbow') return rainbowAt(performance.now() / 1000);
-    return INKS[currentColorKey];
+    const entry = palette.find((p) => p.id === currentColorKey);
+    return entry ? hexToRGB(entry.hex) : hexToRGB(DEFAULT_PALETTE[0].hex);
   }
+
+  function renderSwatches() {
+    if (!swatchesEl) return;
+    swatchesEl.innerHTML = '';
+    for (const p of palette) {
+      const btn = document.createElement('button');
+      btn.className = 'swatch';
+      btn.dataset.color = p.id;
+      btn.type = 'button';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', p.id === currentColorKey ? 'true' : 'false');
+      btn.style.setProperty('--c', p.hex);
+      if (p.i18n) {
+        btn.dataset.i18nAria = p.i18n;
+        btn.setAttribute('aria-label', t(p.i18n));
+      } else {
+        btn.setAttribute('aria-label', t('swatch.custom') + ' ' + p.hex);
+      }
+      const x = document.createElement('span');
+      x.className = 'swatch-x';
+      x.dataset.role = 'remove';
+      x.dataset.i18nAria = 'swatch.remove';
+      x.setAttribute('aria-label', t('swatch.remove'));
+      x.setAttribute('aria-hidden', editingPalette ? 'false' : 'true');
+      x.textContent = '×';
+      btn.appendChild(x);
+      swatchesEl.appendChild(btn);
+    }
+    // Rainbow always present.
+    const rb = document.createElement('button');
+    rb.className = 'swatch rainbow';
+    rb.dataset.color = 'rainbow';
+    rb.type = 'button';
+    rb.setAttribute('role', 'radio');
+    rb.setAttribute('aria-checked', currentColorKey === 'rainbow' ? 'true' : 'false');
+    rb.dataset.i18nAria = 'swatch.rainbow';
+    rb.setAttribute('aria-label', t('swatch.rainbow'));
+    swatchesEl.appendChild(rb);
+    // "+" slot — only in edit mode, only if we have room.
+    if (editingPalette && palette.length < MAX_PALETTE) {
+      const plus = document.createElement('button');
+      plus.className = 'swatch swatch-add';
+      plus.type = 'button';
+      plus.dataset.role = 'add';
+      plus.dataset.i18nAria = 'add_color';
+      plus.setAttribute('aria-label', t('add_color'));
+      plus.textContent = '+';
+      swatchesEl.appendChild(plus);
+    }
+    swatchesEl.classList.toggle('editing', editingPalette);
+  }
+
+  function openPicker(id) {
+    const entry = palette.find((p) => p.id === id);
+    if (!entry || !picker) return;
+    pickerTargetId = id;
+    picker.value = entry.hex;
+    // Programmatic .click() works because we're inside a trusted click handler chain.
+    picker.click();
+  }
+
+  // Event delegation on the swatches row — survives renderSwatches() rebuilds.
+  if (swatchesEl) {
+    swatchesEl.addEventListener('click', (e) => {
+      // × remove takes priority over selecting the underlying swatch.
+      const rm = e.target.closest('[data-role="remove"]');
+      if (rm && editingPalette) {
+        e.stopPropagation();
+        const sw = rm.closest('.swatch');
+        if (!sw) return;
+        const id = sw.dataset.color;
+        palette = palette.filter((p) => p.id !== id);
+        if (currentColorKey === id) {
+          currentColorKey = palette[0] ? palette[0].id : 'rainbow';
+        }
+        savePalette();
+        renderSwatches();
+        return;
+      }
+      const add = e.target.closest('[data-role="add"]');
+      if (add && editingPalette && palette.length < MAX_PALETTE) {
+        const id = 'custom-' + Date.now().toString(36);
+        palette.push({ id, hex: NEW_COLOR_DEFAULT });
+        currentColorKey = id;
+        savePalette();
+        renderSwatches();
+        openPicker(id);
+        return;
+      }
+      const sw = e.target.closest('.swatch');
+      if (!sw) return;
+      const id = sw.dataset.color;
+      if (editingPalette && id !== 'rainbow') {
+        // In edit mode, clicking a normal swatch opens its color picker
+        // rather than selecting it as the active color.
+        openPicker(id);
+        return;
+      }
+      currentColorKey = id;
+      swatchesEl.querySelectorAll('.swatch').forEach((s) => {
+        s.setAttribute('aria-checked', s === sw ? 'true' : 'false');
+      });
+    });
+  }
+
+  if (picker) {
+    picker.addEventListener('input', (e) => {
+      const entry = palette.find((p) => p.id === pickerTargetId);
+      if (!entry || !isValidHex(e.target.value)) return;
+      entry.hex = e.target.value;
+      savePalette();
+      // Live preview — re-render to update the swatch background.
+      renderSwatches();
+    });
+  }
+
+  function setEditingPalette(on) {
+    editingPalette = !!on;
+    const btn = document.getElementById('btn-edit-palette');
+    const reset = document.getElementById('btn-reset-palette');
+    if (btn) {
+      const label = btn.querySelector('.action-label');
+      if (label) {
+        label.dataset.i18n = editingPalette ? 'done' : 'edit_palette';
+        label.textContent = t(editingPalette ? 'done' : 'edit_palette');
+      }
+      btn.classList.toggle('is-active', editingPalette);
+    }
+    if (reset) reset.hidden = !editingPalette;
+    renderSwatches();
+  }
+
+  const editBtn = document.getElementById('btn-edit-palette');
+  if (editBtn) editBtn.addEventListener('click', () => setEditingPalette(!editingPalette));
+  const resetBtn = document.getElementById('btn-reset-palette');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      palette = DEFAULT_PALETTE.map((p) => ({ ...p }));
+      currentColorKey = palette[0].id;
+      savePalette();
+      renderSwatches();
+    });
+  }
+
+  // First render — has to happen after applyLang so the aria-labels use
+  // the right language; applyLang is called from the init block below.
+  renderSwatches();
 
   // ---------- Input ----------
 

@@ -93,8 +93,22 @@
     return;
   }
 
+  // Wave-physics surface layer. Sits on top of the ink sim — the ink renders
+  // into wave.inkTarget instead of straight to the canvas, then the wave
+  // display shader samples it with refraction + Fresnel + specular.
+  let waves = null;
+  try {
+    if (typeof Waves === 'function') waves = new Waves(sim);
+  } catch (e) {
+    console.warn('[shuimo] wave layer init failed:', e);
+    waves = null;
+  }
+
   resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    if (waves) waves.resize(sim.gl.drawingBufferWidth, sim.gl.drawingBufferHeight);
+  });
 
   // ---------- Color selection ----------
 
@@ -145,6 +159,8 @@
     // intensity tuned so single tap is a visible drop but not opaque
     const intensity = 0.85;
     sim.splat(uv.x, uv.y, dx, dy, absorb.map((c) => c * intensity));
+    // Tap also rings the wave field so the drop visibly emanates outward.
+    if (waves) waves.pulse(uv, 5.0);
   }
 
   function drag(prev, curr) {
@@ -163,7 +179,8 @@
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     canvas.setPointerCapture(e.pointerId);
     const uv = pointerToUV(e.clientX, e.clientY);
-    pointers.set(e.pointerId, { uv, moved: false, downAt: performance.now() });
+    // Track prevUv so the wave layer can stamp a capsule between frames.
+    pointers.set(e.pointerId, { uv, prevUv: uv, moved: false, downAt: performance.now() });
     dismissHint();
     e.preventDefault();
   });
@@ -190,6 +207,7 @@
     const moved = Math.hypot(uv.x - state.uv.x, uv.y - state.uv.y);
     if (moved > 0.001) state.moved = true;
     drag(state.uv, uv);
+    state.prevUv = state.uv;
     state.uv = uv;
     e.preventDefault();
   });
@@ -234,12 +252,40 @@
   let slowFrames = 0;
   let halved = false;
 
+  /* Build the per-frame capsule list: active pointers contribute their
+     (prev → curr) UV pair; the gesture layer contributes its fingertip list
+     (rebuilt at ~30 Hz inside processResult). Both feed the wave layer's
+     continuous-contact stamps. Pointers also slide prev→curr per frame so
+     the capsule shrinks back to a point when the user holds still. */
+  function buildCapsules() {
+    const caps = [];
+    for (const state of pointers.values()) {
+      caps.push({ curr: state.uv, prev: state.prevUv || state.uv });
+      // Decay prev toward curr so a held-still pointer produces a clean
+      // circular ripple rather than a streak.
+      state.prevUv = state.uv;
+    }
+    if (window.Gestures && window.Gestures.getFingertips) {
+      const tips = window.Gestures.getFingertips();
+      for (let i = 0; i < tips.length; i++) caps.push(tips[i]);
+    }
+    return caps;
+  }
+
   function frame(now) {
     const dt = Math.min((now - lastTime) / 1000, 1 / 30);
     lastTime = now;
 
     sim.step(dt);
-    sim.render();
+
+    if (waves) {
+      waves.setCapsules(buildCapsules());
+      waves.step(dt);
+      sim.render(waves.inkTarget);  // ink → offscreen
+      waves.render();                // wave display shader → canvas
+    } else {
+      sim.render();
+    }
 
     // Adaptive: if >5 consecutive frames over 22ms, halve sim res once.
     if (!halved) {
@@ -267,15 +313,16 @@
 
   window.shuimo = {
     sim,
+    waves,
     canvas,
     currentInk: () => currentInkRGB(),
     absorbance,
     splat: (x, y, dx, dy, color) => sim.splat(x, y, dx, dy, color),
     splatVelocity: (x, y, dx, dy) => sim.splatVelocity(x, y, dx, dy),
-    splatRipple: (x, y, dx, dy, radiusScale) => sim.splatRipple(x, y, dx, dy, radiusScale),
     splatTrail: (x, y, color, strength) => sim.splatTrail(x, y, color, strength),
     clearDye: (sec) => sim.clearDye(sec),
     tap: (uv) => tap(uv),
+    pulseWave: (uv, ampMul) => { if (waves) waves.pulse(uv, ampMul); },
     dismissHint,
   };
 

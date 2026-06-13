@@ -445,14 +445,23 @@
 
     _initBlit() {
       const gl = this.gl;
-      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      // Store buffer handles so we can re-bind in _blit. Other modules
+      // sharing the gl context (waves.js) may bind their own quad buffers
+      // between fluid steps; re-binding makes this loop interop-safe.
+      this._quadBuffer = gl.createBuffer();
+      this._indexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this._quadBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this._indexBuffer);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.enableVertexAttribArray(0);
 
       this._blit = (target, clear) => {
+        gl.bindBuffer(gl.ARRAY_BUFFER, this._quadBuffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this._indexBuffer);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(0);
         if (target == null) {
           gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
           gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -719,7 +728,7 @@
       this._applyFade(dt);
     }
 
-    render() {
+    render(target) {
       const gl = this.gl;
       gl.disable(gl.BLEND);
       const display = this.programs.display;
@@ -727,7 +736,17 @@
       gl.uniform1i(display.uniforms.uTexture, this.dye.read.attach(0));
       const back = this.config.BACK_COLOR;
       gl.uniform3f(display.uniforms.backColor, back[0], back[1], back[2]);
-      this._blit(null);
+      this._blit(target == null ? null : target);
+    }
+
+    /* Expose the createFBO helper so waves.js can build matching FBOs on the
+       same gl context with the same format/filter conventions. */
+    createFBO(w, h, opts) {
+      const gl = this.gl;
+      const ext = this.ext;
+      const filter = (opts && opts.filter === 'linear' && ext.supportLinearFiltering) ? gl.LINEAR : gl.NEAREST;
+      const fmt = ext.formatRGBA;
+      return createFBO(gl, w, h, fmt.internalFormat, fmt.format, ext.halfFloatTexType, filter);
     }
   }
 

@@ -31,21 +31,15 @@
   const PINCH_RATIO_CLOSE = 0.45;         // pinch-close threshold (relative to hand size)
   const PINCH_RATIO_OPEN = 0.60;          // hysteresis: must open past this to re-arm
   const SWIRL_FORCE_GAIN = 0.22;          // tuning knob for fingertip-driven velocity
-  const TRAIL_STRENGTH = 0.0;             // M2 fingertip leaves no trail by default — pure swirl
+  const TRAIL_STRENGTH = 0.0;             // fingertip leaves no trail — pure swirl
   const FIST_HOLD_DURATION_SEC = 0.8;     // fist hold to trigger Clear
   const FIST_HOLD_DRIFT_MAX = 0.08;       // normalized drift that cancels the hold
   const FIST_RATIO_MAX = 0.6;             // tip-to-MCP / hand-scale below this = curled
-  /* Fingertip ripples — fluid-only now. Each fingertip emits a small velocity
-     pulse into the sim at a tight cadence, in a direction rotated by the
-     golden angle so consecutive pulses fan out radially. Vorticity
-     confinement turns the stream into visible ring-like ripples. Gated to
-     stationary fingertips (swirling fingers do something else). */
-  const RIPPLE_INTERVAL_MS = 75;
-  const RIPPLE_MOVE_GATE = 0.030;
-  const RIPPLE_VELOCITY_MAG = 6.0;
-  const RIPPLE_RADIUS_SCALE = 0.28;
-  const GOLDEN_ANGLE = 2.39996323;        // ≈137.5°
   const FINGERTIP_INDICES = [4, 8, 12, 16, 20];
+  /* Wave-layer parameters. Fingertip continuous-contact capsules are stamped
+     into the wave height field every frame by app.js via getFingertips().
+     A pinch fires a one-shot stronger pulse so the drop visibly rings out. */
+  const PINCH_PULSE_AMP = 6.0;            // ampMul on pinch one-shot
 
   // ---------- State ----------
 
@@ -60,6 +54,15 @@
   let toast = null;
   const handStates = new Map(); // key: handedness label, value: per-hand state
 
+  /* Fingertip list, rebuilt each detect frame. Each entry:
+       { curr: {x, y}, prev: {x, y} } in wave/fluid UV (mirrored x, bottom-up y).
+     The frame loop in app.js reads this and feeds it to waves.setCapsules
+     for continuous-contact ripple stamping. */
+  const fingertips = [];
+
+  function getFingertips() { return fingertips; }
+  function clearFingertips() { fingertips.length = 0; }
+
   function newHandState() {
     return {
       lastTip: null,
@@ -68,7 +71,8 @@
       // Fist-hold-to-clear state.
       holdStart: null,
       holdOrigin: null,
-      // Per-fingertip ripple state, keyed by fingertip landmark index.
+      // Per-fingertip last UV — used to build the (prev, curr) capsule
+      // endpoints stamped into the wave field.
       tipState: new Map(),
     };
   }
@@ -145,6 +149,10 @@
     const handedness = result.handedness || [];
     const seen = new Set();
 
+    // Rebuild the fingertip list from scratch this frame; missing hands ⇒ no
+    // entries. The frame loop reads getFingertips() each tick.
+    clearFingertips();
+
     for (let i = 0; i < landmarks.length; i++) {
       const lm = landmarks[i];
       const label = (handedness[i] && handedness[i][0] && handedness[i][0].categoryName) || `H${i}`;
@@ -175,14 +183,16 @@
       }
       state.lastTip = tipUV;
 
-      // Pinch detection (edge-debounced with hysteresis)
+      // Pinch detection (edge-debounced with hysteresis). On close-edge we
+      // drop ink into the dye AND fire a one-shot wave pulse so the drop
+      // visibly rings out into the water.
       const handScale = dist2D(lm[0], lm[9]) || 0.001;
       const pinchRatio = dist2D(lm[4], lm[8]) / handScale;
       if (state.pinchArmed && pinchRatio < PINCH_RATIO_CLOSE) {
-        // Drop ink at the pinch midpoint, in mirrored UV
         const mx = 1 - (lm[4].x + lm[8].x) * 0.5;
         const my = 1 - (lm[4].y + lm[8].y) * 0.5;
         api.tap({ x: mx, y: my });
+        if (api.pulseWave) api.pulseWave({ x: mx, y: my }, PINCH_PULSE_AMP);
         api.dismissHint();
         state.pinchArmed = false;
         state.wasPinching = true;
@@ -191,34 +201,20 @@
         state.wasPinching = false;
       }
 
-      // Fingertip ripples — each of 5 fingertips dumps a small velocity
-      // pulse into the fluid sim while stationary. Direction rotates by the
-      // golden angle each pulse so the energy fans out radially over the
-      // next few emissions; vorticity confinement amplifies them into
-      // ring-like ripples in the water itself (no DOM overlay). Movement
-      // gate keeps fast-moving fingers from double-firing with the swirl.
+      // Fingertip → wave-field capsule. Each frame the five fingertips
+      // contribute a (prev, curr) capsule that gets stamped into the
+      // height field by waves.step. Continuous contact builds up gradually;
+      // motion elongates the capsule into a bow-wave; stationary tips
+      // produce clean circular ripples (capsule degenerates to a point).
       for (const tipIdx of FINGERTIP_INDICES) {
         const uvX = 1 - lm[tipIdx].x;          // mirrored
-        const uvY = 1 - lm[tipIdx].y;          // fluid UV is bottom-up
-        const screenY = lm[tipIdx].y;          // top-down for motion gating
-        const ts = state.tipState.get(tipIdx) || { last: null, lastEmit: 0, angle: null };
+        const uvY = 1 - lm[tipIdx].y;          // wave/fluid UV is bottom-up
+        const ts = state.tipState.get(tipIdx) || { prev: null };
         state.tipState.set(tipIdx, ts);
-        const moved = ts.last
-          ? Math.hypot(uvX - ts.last.x, screenY - ts.last.y)
-          : 0;
-        ts.last = { x: uvX, y: screenY };
-        if (now - ts.lastEmit < RIPPLE_INTERVAL_MS) continue;
-        if (moved > RIPPLE_MOVE_GATE) continue;
-        ts.angle = (ts.angle == null ? Math.random() * Math.PI * 2 : ts.angle + GOLDEN_ANGLE);
-        const a = ts.angle;
-        api.splatRipple(
-          uvX,
-          uvY,
-          Math.cos(a) * RIPPLE_VELOCITY_MAG,
-          Math.sin(a) * RIPPLE_VELOCITY_MAG,
-          RIPPLE_RADIUS_SCALE
-        );
-        ts.lastEmit = now;
+        const curr = { x: uvX, y: uvY };
+        const prev = ts.prev || curr;          // first frame: zero-length capsule
+        fingertips.push({ curr, prev });
+        ts.prev = curr;
       }
     }
 
@@ -345,6 +341,7 @@
     if (video) video.classList.remove('visible');
     hidePalmRing();
     handStates.clear();
+    clearFingertips();
     setState('off');
   }
 
@@ -414,5 +411,11 @@
     init();
   }
 
-  window.Gestures = { toggle, enable, disable, get state() { return internalState; } };
+  window.Gestures = {
+    toggle,
+    enable,
+    disable,
+    getFingertips,
+    get state() { return internalState; },
+  };
 })();
